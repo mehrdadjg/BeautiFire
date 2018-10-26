@@ -7,6 +7,22 @@ class Align(Enum):
 	CENTER = 0x2
 	STRETCH = 0x4
 
+class Segment:
+	def __init__(self, raw_text, function):
+		self.raw_text = raw_text
+		self.function = function
+	
+	def __repr__(self):
+		return '<Segment ' + self.function.name + ': "' + self.raw_text + '">'
+
+class Token:
+	def __init__(self, text, attached_to_previous = False):
+		self.text = text
+		self.attached_to_previous = attached_to_previous
+	
+	def __repr__(self):
+		return '<Token "' + self.text + '">'
+	
 class SegmentFunction(Enum):
 	NORMALTEXT = 0x0
 	SINGLELINE = 0x1
@@ -31,15 +47,16 @@ class BeautiFire:
 		self.page_width = page_width
 	
 	def print_paragraph(self, parahraph, indent=0):
+		## Handling boundary cases
 		if parahraph.strip() == '':
 			print()
 			return
 		elif '\n' in parahraph:
 			raise ValueError("Paragraph contains a new line character.")
-		special_reg = re.compile(r"\$")
 		
 		## Segmentation: A segment is a maximal part of the text that has
-		##	a specific functionality
+		## a specific functionality.
+		special_reg = re.compile(r"\$")
 		segments = special_reg.split(parahraph)
 		
 		index = 0
@@ -47,7 +64,7 @@ class BeautiFire:
 		
 		while index < len(segments):
 			if len(segments[index]) == 0:
-				segments[index] = [segments[index], segment_function]
+				segments[index] = Segment(segments[index], segment_function)
 				index = index + 1
 				segment_function = SegmentFunction(1 - segment_function.value)
 			elif segments[index][-1] == '\\':
@@ -55,7 +72,7 @@ class BeautiFire:
 					segments[index] = segments[index][:-1] + '$' + segments[index + 1]
 					del segments[index + 1]
 			else:
-				segments[index] = [segments[index], segment_function]
+				segments[index] = Segment(segments[index], segment_function)
 				index = index + 1
 				segment_function = SegmentFunction(1 - segment_function.value)
 		# End of Segmentation
@@ -63,26 +80,27 @@ class BeautiFire:
 		tokens = []
 		for seg_index in range(len(segments)):
 			segment = segments[seg_index]
-			if segment[1] == False:
+			if segment.function == SegmentFunction.NORMALTEXT:
 				first = True
-				for word in re.split('|'.join(string.whitespace), segment[0]):
+				for word in re.split('|'.join(string.whitespace), segment.raw_text):
 					if word != '':
 						if first:
-							if segment[0][0] in string.whitespace:
+							if segment.raw_text[0] in string.whitespace:
 								tokens.append((word, False))
 							else:
 								tokens.append((word, True))
 							first = False
 						else:
 							tokens.append((word, False))
-			else:
+			elif segment.function == SegmentFunction.SINGLELINE:
 				if seg_index > 0:
-					if segments[seg_index - 1][0][-1] in string.whitespace:
-						tokens.append((segment[0], False))
+					previous_segment = segments[seg_index - 1]
+					if previous_segment.raw_text[-1] in string.whitespace:
+						tokens.append((segment.raw_text, False))
 					else:
-						tokens.append((segment[0], True))
+						tokens.append((segment.raw_text, True))
 				else:
-					tokens.append((segment[0], True))
+					tokens.append((segment.raw_text, True))
 		
 		index = 0
 		line = ''
