@@ -1,4 +1,4 @@
-from BeautiFire import BeautiFire
+from beautifire import BeautiFire
 
 b = BeautiFire()
 print("*")
