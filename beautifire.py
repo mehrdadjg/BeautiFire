@@ -46,11 +46,13 @@ class BeautiFire:
 		## page related dimensions
 		self.page_width = 80
 		
-		## text related dimensions
+		## spacing dimensions
 		self.par_first_line_start_indent = 4
 		self.par_first_line_end_spacing = 0
 		self.par_other_lines_start_indent = 0
 		self.par_other_lines_end_spacing = 0
+		
+		## special characters properties
 		self.tab_width = 4
 		
 		## global paragraph properties
@@ -146,8 +148,8 @@ class BeautiFire:
 			else:
 				newToken = {False:' ', True:''}[tokens[index].attached_to_previous_token] + tokens[index].text
 			
-			if len(line + newToken) <= line_text_width:
-				line = line + newToken
+			if len(line + newToken.replace('\t', ' ' * self.tab_width)) <= line_text_width:
+				line = line + newToken.replace('\t', ' ' * self.tab_width)
 				index = index + 1
 			else:
 				if self.par_alignment == Align.LEFT:
