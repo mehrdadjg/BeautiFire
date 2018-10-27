@@ -2,9 +2,20 @@ from enum import Enum
 import re, string
 
 class Align(Enum):
+	###	In the left alignment, the start indent of a line will appear
+	#	on the left side of the text and the end spacing will appear
+	#	on the right side of the text.
 	LEFT = 0x0
+	###	In the right alignment, the start indent of a line will appear
+	#	on the right side of the text and the end spacing will appear
+	#	on the left side of text.
 	RIGHT = 0x1
+	###	In the center alignment, the spaces appear like the left
+	#	alignment.
+	#	If the text (and the surrounding spaces) cannot be completely
+	#	centered then they will be shifted on space to the left.
 	CENTER = 0x2
+	###	Not implemented yet.
 	STRETCH = 0x4
 
 class Segment:
@@ -16,9 +27,9 @@ class Segment:
 		return '<Segment ' + self.function.name + ': "' + self.raw_text + '">'
 
 class Token:
-	def __init__(self, text, attached_to_previous = False):
+	def __init__(self, text, attached_to_previous_token = False):
 		self.text = text
-		self.attached_to_previous = attached_to_previous
+		self.attached_to_previous_token = attached_to_previous_token
 	
 	def __repr__(self):
 		return '<Token "' + self.text + '">'
@@ -36,8 +47,10 @@ class BeautiFire:
 		self.page_width = 80
 		
 		## text related dimensions
-		self.par_first_line_indent = 4
-		self.par_other_lines_indent = 0
+		self.par_first_line_start_indent = 4
+		self.par_first_line_end_spacing = 0
+		self.par_other_lines_start_indent = 0
+		self.par_other_lines_end_spacing = 0
 		self.tab_width = 4
 		
 		## global paragraph properties
@@ -45,6 +58,17 @@ class BeautiFire:
 	
 	def set_page_width(self, page_width):
 		self.page_width = page_width
+	
+	def set_paragraph_alignment(self, par_alignment):
+		self.par_alignment = par_alignment
+	
+	def set_first_line_spacings(self, start_indent = 4, end_spacing = 0):
+		self.par_first_line_start_indent = start_indent
+		self.par_first_line_end_spacing = end_spacing
+	
+	def set_other_lines_spacings(self, start_indent = 0, end_spacing = 0):
+		self.par_other_lines_start_indent = start_indent
+		self.par_other_lines_end_spacing = end_spacing
 	
 	def print_paragraph(self, parahraph, indent=0):
 		## Handling boundary cases
@@ -77,6 +101,7 @@ class BeautiFire:
 				segment_function = SegmentFunction(1 - segment_function.value)
 		# End of Segmentation
 		
+		## Tokening: tokens are the building blocks of segments.
 		tokens = []
 		for seg_index in range(len(segments)):
 			segment = segments[seg_index]
@@ -85,35 +110,84 @@ class BeautiFire:
 				for word in re.split('|'.join(string.whitespace), segment.raw_text):
 					if word != '':
 						if first:
+							# If the segment's raw text starts with whitespace, then the first
+							# token must not be attached to the previous token
 							if segment.raw_text[0] in string.whitespace:
-								tokens.append((word, False))
+								tokens.append(Token(word))
 							else:
-								tokens.append((word, True))
+								tokens.append(Token(word, attached_to_previous_token=True))
 							first = False
 						else:
-							tokens.append((word, False))
+							tokens.append(Token(word))
 			elif segment.function == SegmentFunction.SINGLELINE:
 				if seg_index > 0:
 					previous_segment = segments[seg_index - 1]
 					if previous_segment.raw_text[-1] in string.whitespace:
-						tokens.append((segment.raw_text, False))
+						tokens.append(Token(segment.raw_text))
 					else:
-						tokens.append((segment.raw_text, True))
+						tokens.append(Token(segment.raw_text, attached_to_previous_token=True))
 				else:
-					tokens.append((segment.raw_text, True))
+					tokens.append(Token(segment.raw_text, attached_to_previous_token=True))
+		# End of Tokening
 		
+		# TEST: print header
+		print("|" + "_" * (self.page_width - 2) + "|")
+		# END TEST
+		## Printing
 		index = 0
 		line = ''
-		line_start = True
+		first_token = True
+		line_text_width = self.page_width - (self.par_first_line_start_indent + self.par_first_line_end_spacing)
+		first_line = True
 		while index < len(tokens):
-			newToken = {False:' ', True:''}[tokens[index][1]] + tokens[index][0]
-			if len(line + newToken) <= self.page_width:
+			if first_token:
+				newToken = tokens[index].text
+				first_token = False
+			else:
+				newToken = {False:' ', True:''}[tokens[index].attached_to_previous_token] + tokens[index].text
+			
+			if len(line + newToken) <= line_text_width:
 				line = line + newToken
 				index = index + 1
 			else:
-				print(len(line))
-				print(line)
+				if self.par_alignment == Align.LEFT:
+					if first_line:
+						print(' ' * self.par_first_line_start_indent + line + ' ' * self.par_first_line_end_spacing)
+						first_line = False
+					else:
+						print(' ' * self.par_other_lines_start_indent + line + ' ' * self.par_other_lines_end_spacing)
+				elif self.par_alignment == Align.RIGHT:
+					if first_line:
+						print(('{:>' + str(self.page_width) + '}').format(' ' * self.par_first_line_end_spacing + line + ' ' * self.par_first_line_start_indent))
+						first_line = False
+					else:
+						print(('{:>' + str(self.page_width) + '}').format(' ' * self.par_other_lines_end_spacing + line + ' ' * self.par_other_lines_start_indent))
+				elif self.par_alignment == Align.CENTER:
+					if first_line:
+						print(('{:^' + str(self.page_width) + '}').format(' ' * self.par_first_line_start_indent + line + ' ' * self.par_first_line_end_spacing))
+						first_line = False
+					else:
+						print(('{:^' + str(self.page_width) + '}').format(' ' * self.par_other_lines_start_indent + line + ' ' * self.par_other_lines_end_spacing))
+				
 				line = ''
-
+				first_token = True
+				line_text_width = self.page_width - (self.par_other_lines_start_indent + self.par_other_lines_end_spacing)
+		
+		if self.par_alignment == Align.LEFT:
+			if first_line:
+				print(' ' * self.par_first_line_start_indent + line + ' ' * self.par_first_line_end_spacing)
+			else:
+				print(' ' * self.par_other_lines_start_indent + line + ' ' * self.par_other_lines_end_spacing)
+		elif self.par_alignment == Align.RIGHT:
+			if first_line:
+				print(('{:>' + str(self.page_width) + '}').format(' ' * self.par_first_line_end_spacing + line + ' ' * self.par_first_line_start_indent))
+			else:
+				print(('{:>' + str(self.page_width) + '}').format(' ' * self.par_other_lines_end_spacing + line + ' ' * self.par_other_lines_start_indent))
+		elif self.par_alignment == Align.CENTER:
+			if first_line:
+				print(('{:^' + str(self.page_width) + '}').format(' ' * self.par_first_line_start_indent + line + ' ' * self.par_first_line_end_spacing))
+			else:
+				print(('{:^' + str(self.page_width) + '}').format(' ' * self.par_other_lines_start_indent + line + ' ' * self.par_other_lines_end_spacing))
+		# End of Printing
 if __name__ == '__main__':
 	input()
